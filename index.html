@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <h1>Image</h1>
+    <img src="http://localhost:8081/api/v1/tests/1/image" />
+
+    <h1>upload Image</h1>
+    <form action="http://localhost:8081/api/v1/tests/1/image/upload" method="post" enctype="multipart/form-data">
+        <input type="file" name="image" />
+        <button>upload image</button>
+    </form>
+
+    <h1>Delete Image</h1>
+    <form action="http://localhost:8081/api/v1/tests/2/image" method="delete">
+        <button>delte image</button>
+    </form>
+</body>
+</html>

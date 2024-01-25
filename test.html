@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <style>
+    #originalCanvas,
+    #canvas {
+        display: inline-block;
+        width: 100%; /* Ajoutez la largeur souhaitée en pixels */
+        height: 100%; /* Ajoutez la hauteur souhaitée en pixels */
+        border: 2px solid blue; /* Ajoutez la bordure bleue */
+    }
+</style>
+
+ 
+  <title>Canvas Draggables</title>
+</head>
+<body>
+
+  
+  <canvas id="canvas"></canvas>
+  <canvas id="originalCanvas"></canvas>
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    const Point2 = (x, y) => ({ x, y });
+    const Line = (p1, p2) => ({ p1, p2 });
+
+    const setStyle = (style) => Object.entries(style).forEach(([key, value]) => ctx[key] = value);
+    const eachOf = (array, callback) => array.some((item, i) => callback(item, i));
+
+    const list = {
+      items: null,
+      add(item) { this.items.push(item); return item },
+      eachItem(callback) { this.items.forEach((item, i) => callback(item, i)); }
+    }
+
+    function createList(extend) {
+      return Object.assign({}, list, { items: [] }, extend);
+    }
+
+    function getClosestPoint(from, minDist) {
+      let closestPoint;
+      let closestDist = minDist;
+      this.eachItem(point => {
+        const dist = Math.hypot(from.x - point.x, from.y - point.y);
+        if (dist < closestDist) {
+          closestPoint = point;
+          closestDist = dist;
+        }
+      });
+      return closestPoint;
+    }
+
+    function distanceLineFromPoint(line, point) {
+      const lx = points.items[line.p1].x;
+      const ly = points.items[line.p1].y;
+      const v1x = points.items[line.p2].x - lx;
+      const v1y = points.items[line.p2].y - ly;
+      const v2x = point.x - lx;
+      const v2y = point.y - ly;
+      const u = (v2x * v1x + v2y * v1y) / (v1y * v1y + v1x * v1x);
+      if (u >= 0 && u <= 1) {
+        return Math.hypot(lx + v1x * u - point.x, ly + v1y * u - point.y);
+      } else if (u < 0) {
+        return Math.hypot(lx - point.x, ly - point.y);
+      }
+      return Math.hypot(points.items[line.p2].x - point.x, points.items[line.p2].y - point.y);
+    }
+
+    function getClosestLine(from, minDist) {
+      let closestLine;
+      let closestDist = minDist;
+      this.eachItem(line => {
+        const dist = distanceLineFromPoint(line, from);
+        if (dist < closestDist) {
+          closestLine = line;
+          closestDist = dist;
+        }
+      });
+      return closestLine;
+    }
+
+    function calculateAngle(p1, p2) {
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      return Math.atan2(dy, dx);
+    }
+
+    function toDegrees(radians) {
+      return radians * (180 / Math.PI);
+    }
+
+    function drawPoint(point) {
+      ctx.rect(point.x - 2, point.y - 2, 4, 4);
+    }
+
+    function drawLine(line) {
+      ctx.moveTo(points.items[line.p1].x, points.items[line.p1].y);
+      ctx.lineTo(points.items[line.p2].x, points.items[line.p2].y);
+
+      // Calculate and display the angle
+      const angle = calculateAngle(points.items[line.p1], points.items[line.p2]);
+      const angleDegrees = toDegrees(angle);
+      const midX = (points.items[line.p1].x + points.items[line.p2].x) / 2;
+      const midY = (points.items[line.p1].y + points.items[line.p2].y) / 2;
+      ctx.save();
+      ctx.translate(midX, midY);
+      ctx.rotate(angle);
+      ctx.fillStyle = 'black';
+      ctx.font = '12px Arial';
+      ctx.fillText(angleDegrees.toFixed(2) + '°', 10, -5);
+      ctx.restore();
+    }
+
+    function drawLines() {
+      this.eachItem(line => drawLine(line));
+    }
+
+    function drawPoints() {
+      this.eachItem(point => drawPoint(point));
+    }
+
+    function connectAllPoints() {
+      for (let i = 0; i < points.items.length - 1; i++) {
+        lines.add(Line(i, i + 1));
+      }
+      // Connect the last and first points to close the loop
+      lines.add(Line(points.items.length - 1, 0));
+    }
+
+    const points = createList({ getClosest: getClosestPoint, draw: drawPoints });
+    const lines = createList({ getClosest: getClosestLine, draw: drawLines });
+
+    const mouse = { x: 0, y: 0, button: false, drag: false, dragStart: false, dragEnd: false, dragStartX: 0, dragStartY: 0 }
+    function mouseEvents(e) {
+      mouse.x = e.pageX;
+      mouse.y = e.pageY;
+      const lb = mouse.button;
+      mouse.button = e.type === "mousedown" ? true : e.type === "mouseup" ? false : mouse.button;
+      if (lb !== mouse.button) {
+        if (mouse.button) {
+          mouse.drag = true;
+          mouse.dragStart = true;
+          mouse.dragStartX = mouse.x;
+          mouse.dragStartY = mouse.y;
+        } else {
+          mouse.drag = false;
+          mouse.dragEnd = true;
+        }
+      }
+    }
+    
+    ["down", "up", "move"].forEach(name => canvas.addEventListener("mouse" + name, mouseEvents));
+
+    var w = canvas.width;
+    var h = canvas.height;
+    var cw = w / 2;
+    var ch = h / 2;
+    var globalTime;
+    var closestLine;
+    var closestPoint;
+    var pointDrag;
+    var dragOffsetX;
+    var dragOffsetY;
+    var cursor;
+    var toolTip;
+    var helpCount = 0;
+    const minDist = 20;
+    const lineStyle = { lineWidth: 2, strokeStyle: "green" };
+    const pointStyle = { lineWidth: 1, strokeStyle: "blue" };
+    const highlightStyle = { lineWidth: 3, strokeStyle: "red" };
+    const font = { font: "18px arial", fillStyle: "black", textAlign: "center" };
+
+    function update(timer) {
+      cursor = "crosshair";
+      toolTip = helpCount < 2 ? "Click drag to create a line" : "";
+      globalTime = timer;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 1;
+      if (w !== innerWidth || h !== innerHeight) {
+        cw = (w = canvas.width = innerWidth) / 2;
+        ch = (h = canvas.height = innerHeight) / 2;
+      } else {
+        ctx.clearRect(0, 0, w, h);
+      }
+      if (mouse.drag === false) {
+        closestLine = undefined;
+        closestPoint = points.getClosest(mouse, minDist);
+        if (closestPoint === undefined) {
+          closestLine = lines.getClosest(mouse, minDist);
+        }
+        if (closestPoint || closestLine) {
+          toolTip = "Click drag to move " + (closestPoint ? "point" : "line");
+          cursor = "move";
+        }
+      }
+      if (mouse.dragStart) {
+        if (closestPoint) {
+          dragOffsetX = closestPoint.x - mouse.x;
+          dragOffsetY = closestPoint.y - mouse.y;
+          pointDrag = true;
+
+        } else if (closestLine) {
+          dragOffsetX = points.items[closestLine.p1].x - mouse.x;
+          dragOffsetY = points.items[closestLine.p1].y - mouse.y;
+          pointDrag = false;
+
+        } else {
+          points.add(Point2(mouse.x, mouse.y));
+          closestPoint = points.add(Point2(mouse.x, mouse.y));
+          closestLine = lines.add(Line(points.items.length - 2, points.items.length - 1));
+          dragOffsetX = 0;
+          dragOffsetY = 0;
+          pointDrag = true;
+          helpCount += 1;
+
+        }
+        mouse.dragStart = false;
+
+      } else if (mouse.drag) {
+        cursor = 'none';
+        if (pointDrag) {
+          closestPoint.x = mouse.x + dragOffsetX;
+          closestPoint.y = mouse.y + dragOffsetY;
+        } else {
+          const dx = mouse.x - mouse.dragStartX;
+          const dy = mouse.y - mouse.dragStartY;
+          mouse.dragStartX = mouse.x;
+          mouse.dragStartY = mouse.y;
+          points.items[closestLine.p1].x += dx;
+          points.items[closestLine.p1].y += dy;
+          points.items[closestLine.p2].x += dx;
+          points.items[closestLine.p2].y += dy;
+        }
+      }
+      setStyle(lineStyle);
+      ctx.beginPath();
+      lines.draw();
+      ctx.stroke();
+      setStyle(pointStyle);
+      ctx.beginPath();
+      points.draw();
+      ctx.stroke();
+      setStyle(highlightStyle);
+      ctx.beginPath();
+      if (closestLine) { drawLine(closestLine) }
+      if (closestPoint) { drawPoint(closestPoint) }
+      ctx.stroke();
+      if (helpCount < 2) {
+        setStyle(font);
+        ctx.fillText(toolTip, cw, 30);
+      }
+      canvas.style.cursor = cursor;
+      if (helpCount < 5) {
+        canvas.title = toolTip;
+      } else {
+        canvas.title = "";
+      }
+      requestAnimationFrame(update);
+    }
+    
+    requestAnimationFrame(update);
+  </script>
+</body>
+</html>
